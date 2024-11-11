@@ -1,0 +1,71 @@
+const puppeteer = require('puppeteer');
+const fs = require('fs');
+
+// Configuraciones de páginas
+const paginaConfigs = [
+  {
+    url: 'https://www.lanueva.com/servicios/clasificados/R39https://d2.capsf.ar/bolsa-de-trabajo/',
+  },
+];
+
+// Función para extraer correos electrónicos desde la página cargada con Puppeteer
+async function extraerCorreos(url) {
+  const correos = new Set();
+  
+  try {
+    const browser = await puppeteer.launch();
+    const page = await browser.newPage();
+    await page.goto(url, { waitUntil: 'networkidle2' });
+    
+    // Esperar a que se cargue el contenido de la clase "a" que contiene correos
+    await page.waitForSelector('p.clasificados__aviso');
+
+    // Extraer correos de elementos con clase "a"
+    const correosExtraidos = await page.evaluate(() => {
+      const elements = Array.from(document.querySelectorAll('p.clasificados__aviso'));
+      const emails = [];
+
+      elements.forEach(element => {
+        const text = element.textContent;
+        
+        // Excluir correos que contengan la palabra "Cordoba"
+        if (!text.includes("Cordoba")) {
+        const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
+        if (emailMatch) {
+          emails.push(...emailMatch);
+        }
+      }
+      });
+
+      return emails;
+    });
+
+    correosExtraidos.forEach(correo => correos.add(correo));
+    await browser.close();
+
+  } catch (error) {
+    console.error(`Error al extraer correos de ${url}:`, error);
+  }
+
+  return Array.from(correos);
+}
+
+// Función principal para extraer y guardar correos en un archivo
+async function main() {
+  const correosTotales = new Set();
+
+  // Iterar sobre cada configuración de página y extraer correos
+  for (const config of paginaConfigs) {
+    console.log(`Procesando URL: ${config.url}`);
+    const correosExtraidos = await extraerCorreos(config.url);
+    correosExtraidos.forEach(correo => correosTotales.add(correo));
+  }
+
+  // Guardar todos los correos en un archivo de texto
+  const listaCorreos = Array.from(correosTotales).join('\n');
+  fs.writeFileSync('correosExtraidos.txt', listaCorreos);
+  console.log(`Se han extraído y guardado ${correosTotales.size} correos en el archivo correosExtraidos.txt`);
+}
+
+// Llamada a main
+main().catch(console.error);
